@@ -83,11 +83,7 @@ namespace SmartCampusSandbox.AzureFunctions
                 Unit = unit,
                 DeviceTimestamp = telemetryDataPoint.timestamp.ToString("o"),
                 DeviceStatus = telemetryDataPoint.status,
-                EventEnqueuedUtcTime = enqueuedTimeUtcString,
-
-                //Just for Table Storage
-                PartitionKey = telemetryDataPoint.gwy,
-                RowKey = telemetryDataPoint.name + enqueuedTimeUtcString
+                EventEnqueuedUtcTime = enqueuedTimeUtcString
             };
 
             return iconicsOutput;
@@ -135,7 +131,7 @@ namespace SmartCampusSandbox.AzureFunctions
             return (outputValue, outputUnits);
         }
     }
-    public class IoTWorXOutput : TableEntity
+    public class IoTWorXOutput
     {
         public string Gateway { get; set; }
         public string FullTagName { get; set; }
