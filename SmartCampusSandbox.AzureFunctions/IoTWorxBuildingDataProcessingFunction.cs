@@ -14,7 +14,7 @@ namespace SmartCampusSandbox.AzureFunctions
     {
         [FunctionName("IoTWorxBuildingDataProcessingFunction")]
         //Data is recorded in the following azure storage table
-        [return: Table("IoTWorXOutputTable")]
+        //[return: Table("IoTWorXOutputTable")]
         public static async Task<IoTWorXOutput> Run(
 
         // Incoming events delivered to the IoTHub trigger this Fn
@@ -24,9 +24,10 @@ namespace SmartCampusSandbox.AzureFunctions
             ConsumerGroup = "smartcampussandbox")] EventData message,
 
         // Outgoing transformed event data is delivered to this Event Hub
-          [EventHub(
+        [EventHub(
             eventHubName: "iotworxoutputevents", 
             Connection = "EventHubConnectionAppSetting")] IAsyncCollector<string> outputEvents,
+
         ILogger log)
         {
             string msg = Encoding.UTF8.GetString(message.Body);
