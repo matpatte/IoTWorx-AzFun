@@ -15,51 +15,57 @@ namespace SmartCampusSandbox.AzureFunctions
         [FunctionName("IoTWorxBuildingDataProcessingFunction")]
         //Data is recorded in the following azure storage table
         //[return: Table("IoTWorXOutputTable")]
-        public static async Task<IoTWorXOutput> Run(
-
-        // Incoming events delivered to the IoTHub trigger this Fn
-        [IoTHubTrigger(
-            eventHubName: "messages/events", 
-            Connection = "IoTHubTriggerConnection", 
-            ConsumerGroup = "smartcampussandbox")] EventData message,
-
-        // Outgoing transformed event data is delivered to this Event Hub
-        [EventHub(
-            eventHubName: "iotworxoutputevents", 
-            Connection = "EventHubConnectionAppSetting")] IAsyncCollector<string> outputEvents,
-
-        ILogger log)
+        public static async Task Run(
+            // Incoming events delivered to the IoTHub trigger this Fn
+            [IoTHubTrigger(
+                eventHubName: "messages/events", 
+                Connection = "IoTHubTriggerConnection", 
+                ConsumerGroup = "smartcampussandbox")] EventData[] eventHubMessages,
+            // Outgoing transformed event data is delivered to this Event Hub
+            [EventHub(
+                eventHubName: "iotworxoutputevents", 
+                Connection = "EventHubConnectionAppSetting")] IAsyncCollector<string> outputEvents,
+            ILogger log,
+            System.Threading.CancellationToken token)
         {
-            string msg = Encoding.UTF8.GetString(message.Body);
-            log.LogInformation("C# IoT Hub trigger function processed a message: {msg}", msg);
+            foreach (var message in eventHubMessages)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    log.LogWarning("Function was cancelled.");
+                    break;
+                }
 
-            /* Example inbound JSON from IoTWorx
-             * {
-               "gwy": "b19IoTWorx",
-               "name": "Device_190131_AI_10",
-               "value": "121.000000 CUBIC-FEET-PER-MINUTE",
-               "timestamp": "2019-06-12T19:46:52.174Z",
-               "status": true
-               }
-             */
+                string msg = Encoding.UTF8.GetString(message.Body);
+                log.LogInformation("C# IoT Hub trigger function processed a message: {msg}", msg);
 
-            dynamic telemetryDataPoint = Newtonsoft.Json.JsonConvert.DeserializeObject(msg);
+                /* Example inbound JSON from IoTWorx
+                * {
+                "gwy": "b19IoTWorx",
+                "name": "Device_190131_AI_10",
+                "value": "121.000000 CUBIC-FEET-PER-MINUTE",
+                "timestamp": "2019-06-12T19:46:52.174Z",
+                "status": true
+                }
+                */
 
-            string logMsg = $"Telemetry Received : " +
-                "Name {telemetryDataPoint.name}" +
-                "value {telemetryDataPoint.value}" +
-                "timestamp {telemetryDataPoint.timestamp}" +
-                "status {telemetryDataPoint.status}";
+                dynamic telemetryDataPoint = Newtonsoft.Json.JsonConvert.DeserializeObject(msg);
 
-            IoTWorXOutput iconicsOutput = TransformMsgToIotWorXOutput(
-                message.SystemProperties.EnqueuedTimeUtc, telemetryDataPoint);
+                string logMsg = $"Telemetry Received : " +
+                    "Name {telemetryDataPoint.name}" +
+                    "value {telemetryDataPoint.value}" +
+                    "timestamp {telemetryDataPoint.timestamp}" +
+                    "status {telemetryDataPoint.status}";
 
-            log.LogInformation(JsonConvert.SerializeObject(iconicsOutput, Formatting.Indented));
+                IoTWorXOutput iconicsOutput = TransformMsgToIotWorXOutput(
+                    message.SystemProperties.EnqueuedTimeUtc, telemetryDataPoint);
 
-            //Send to EventHub
-            await outputEvents.AddAsync(JsonConvert.SerializeObject(iconicsOutput));
+                log.LogInformation(JsonConvert.SerializeObject(iconicsOutput, Formatting.Indented));
 
-            return iconicsOutput;
+                //Send to EventHub
+                await outputEvents.AddAsync(JsonConvert.SerializeObject(iconicsOutput));
+
+            }
         }
 
         public static IoTWorXOutput TransformMsgToIotWorXOutput(DateTime enqueuedTimeUtc, dynamic telemetryDataPoint)
