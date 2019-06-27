@@ -61,8 +61,8 @@ namespace SmartCampusSandbox.AzureFunctions
             //Deserialize all the inbound messages in the array, preserving properties
             var messages = eventHubMessages
                 .Select(data => new IotBacNetEventHubMessageBatch(
-                    JsonConvert.DeserializeObject<IoTWorxBACNetMsg>(Encoding.UTF8.GetString(data.Body)), 
-                    data.SystemProperties, 
+                    JsonConvert.DeserializeObject<IoTWorxBACNetMsg>(Encoding.UTF8.GetString(data.Body)),
+                    data.SystemProperties,
                     data.Properties))
                 .ToList();
 
@@ -87,7 +87,7 @@ namespace SmartCampusSandbox.AzureFunctions
 
                     //Write back to DocDb
                     await outputDeviceDocumentsUpdated.AddAsync(deviceDoc, token);
-                    
+
                     //Send to EventHub
                     await outputEvents.AddAsync(JsonConvert.SerializeObject(deviceDoc), token);
 
@@ -95,7 +95,7 @@ namespace SmartCampusSandbox.AzureFunctions
                 }
                 else
                 {
-                    //device id not found in database, 
+                    //device id not found in database,
                     //Todo - add to queue of unidentified devices
                     unidentifiedDevices.Add(telemetryDataPoint.IoTWorxBacNetMsg.name);
                 }
@@ -128,7 +128,7 @@ namespace SmartCampusSandbox.AzureFunctions
                 var query = docDbClient.CreateDocumentQuery<DeviceDocument>(createDocumentCollectionUri, DocDbQueryOption)
                     .Where(document => deviceIds.Contains(document.id))
                     .AsDocumentQuery();
-                
+
                 while (query.HasMoreResults)
                 {
                     knownDevices.AddRange(await query.ExecuteNextAsync<DeviceDocument>(token));
@@ -139,20 +139,15 @@ namespace SmartCampusSandbox.AzureFunctions
         }
 
         public static DeviceDocument TransformMsgToDeviceDoc(DateTime enqueuedTimeUtc, dynamic telemetryDataPoint, DeviceDocument inputDeviceDocument)
-        {            
+        {
             var parsedDeviceName = ((string)telemetryDataPoint.name).Split('_');
 
             string unparsedValue = telemetryDataPoint.value.ToString();
 
             (string value, string unit) = ParseValueUnit(unparsedValue, parsedDeviceName[2]);
-            
-            //Gateway = telemetryDataPoint.gwy,
-            //FullTagName = telemetryDataPoint.name,
-            inputDeviceDocument.DeviceName = parsedDeviceName[1];
-            inputDeviceDocument.Object = parsedDeviceName[2]; //Object is a reserved word, hence the @
-            inputDeviceDocument.Instance = int.Parse(parsedDeviceName[3] ?? "");
+
             inputDeviceDocument.PresentValue = value;
-            inputDeviceDocument.Units = unit;
+            inputDeviceDocument.ValueUnits = unit;
             inputDeviceDocument.DeviceTimestamp = DateTimeOffset.Parse((string)telemetryDataPoint.timestamp, styles: DateTimeStyles.RoundtripKind);
             inputDeviceDocument.DeviceStatus = telemetryDataPoint.status;
             inputDeviceDocument.EventEnqueuedUtcTime = enqueuedTimeUtc;
@@ -160,18 +155,12 @@ namespace SmartCampusSandbox.AzureFunctions
             return inputDeviceDocument;
         }
 
-        /// <summary>
-        /// Parses the value and returns
-        /// </summary>
-        /// <param name="value"></param>
-        /// <param name="objectType"></param>
-        /// <returns></returns>
         public static (string value, string unit) ParseValueUnit(
             string value,
             string objectType)
         {
             string trimedVal = value.Trim();
-            string outputValue; 
+            string outputValue;
             string outputUnits = string.Empty;
 
             switch (objectType)
@@ -184,7 +173,7 @@ namespace SmartCampusSandbox.AzureFunctions
                         var splitValUnit = trimedVal.Split(' ');
                         outputValue = splitValUnit[0];
                         outputUnits = splitValUnit[1];
-                        
+
                     }
                     else
                     {
@@ -202,7 +191,7 @@ namespace SmartCampusSandbox.AzureFunctions
             return (outputValue, outputUnits);
         }
 
-        
+
     }
     public class IotBacNetEventHubMessageBatch
     {
@@ -233,17 +222,26 @@ namespace SmartCampusSandbox.AzureFunctions
     public class DeviceDocument
     {
         public string id { get; set; }
-        public string Region { get; set; }
-        public string Campus{ get; set; } 
-        public string Building{ get; set; } 
-        public string Floor{ get; set; } 
-        public string Room{ get; set; } 
-        public string Tag{ get; set; }
+        public string GatewayName {get; set;}
         public string DeviceName { get; set; }
-        public string @Object { get; set; } //Object is a reserved word, hence the @
+        public string Region { get; set; }
+        public string Campus { get; set; }
+        public string Building { get; set; }
+        public string Floor { get; set; }
+        public string Room { get; set; }
+        public string ObjectType { get; set; } //Object is a reserved word, hence the @
         public int Instance { get; set; }
-        public string PresentValue{ get; set; } 
-        public string Units{ get; set; } 
+        
+        public string EquipmentClass { get; set; }
+        public string EquipmentModel { get; set; }
+        public string SubsystemClass { get; set; }
+        public string SubsystemModel { get; set; }
+        public string TagName { get; set; }
+        public string FullAssetPath { get; set; }
+        public string Equipment { get; set; }
+
+        public string PresentValue{ get; set; }
+        public string ValueUnits{ get; set; }
         public DateTimeOffset EventEnqueuedUtcTime{ get; set; }
         public string DeviceStatus { get; set; }
         public DateTimeOffset DeviceTimestamp { get; set; }
