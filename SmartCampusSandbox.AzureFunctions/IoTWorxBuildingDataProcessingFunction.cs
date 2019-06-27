@@ -228,7 +228,7 @@ namespace SmartCampusSandbox.AzureFunctions
         public string Campus { get; set; }
         public string Building { get; set; }
         public string Floor { get; set; }
-        public string Room { get; set; }
+        public string Unit { get; set; }
         public string ObjectType { get; set; } //Object is a reserved word, hence the @
         public int Instance { get; set; }
         
