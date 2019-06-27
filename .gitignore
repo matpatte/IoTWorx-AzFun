@@ -196,3 +196,5 @@ ModelManifest.xml
 local.settings.json
 *.deb
 *.pubxml
+*.cmd
+*.sql

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -18,7 +19,8 @@ namespace SmartCampusSandbox.AzureFunctions
 {
     public static class IoTWorxBuildingDataProcessingFunction
     {
-        private static readonly Uri DocumentCollectionUri = UriFactory.CreateDocumentCollectionUri("smartcampussandbox", "Devices");
+        private static readonly Uri DocumentCollectionUri = UriFactory.CreateDocumentCollectionUri("SmartCampusSandbox", "Devices");
+        private static readonly FeedOptions DocDbQueryOption = new FeedOptions { EnableCrossPartitionQuery = true };
 
         [FunctionName("IoTWorxBuildingDataProcessingFunction")]
         public static async Task Run(
@@ -58,12 +60,10 @@ namespace SmartCampusSandbox.AzureFunctions
 
             //Deserialize all the inbound messages in the array, preserving properties
             var messages = eventHubMessages
-                .Select(data => new
-                {
-                    Body = (dynamic) JsonConvert.DeserializeObject(Encoding.UTF8.GetString(data.Body)),
-                    SystemProperties = data.SystemProperties,
-                    Properties = data.Properties
-                })
+                .Select(data => new IotBacNetEventHubMessageBatch(
+                    JsonConvert.DeserializeObject<IoTWorxBACNetMsg>(Encoding.UTF8.GetString(data.Body)), 
+                    data.SystemProperties, 
+                    data.Properties))
                 .ToList();
 
             //Retrieve all the devices by Id in the inbound group
@@ -77,19 +77,13 @@ namespace SmartCampusSandbox.AzureFunctions
                     log.LogWarning("Function was cancelled.");
                     break;
                 }
-                 
-                string logMsg = $"Telemetry Received : " +
-                    "Name {telemetryDataPoint.name}" +
-                    "value {telemetryDataPoint.value}" +
-                    "timestamp {telemetryDataPoint.timestamp}" +
-                    "status {telemetryDataPoint.status}";
 
-                var deviceDoc = knownDeviceDocuments.SingleOrDefault(document => document.Id == telemetryDataPoint.Body.name);
+                var deviceDoc = knownDeviceDocuments.SingleOrDefault(document => document.id == telemetryDataPoint.IoTWorxBacNetMsg.name);
                 if (deviceDoc != null)
                 {
                     //update the device doc with current value and time
                     deviceDoc = TransformMsgToDeviceDoc(
-                        telemetryDataPoint.SystemProperties.EnqueuedTimeUtc, telemetryDataPoint.Body, deviceDoc);
+                        telemetryDataPoint.SystemProperties.EnqueuedTimeUtc, telemetryDataPoint.IoTWorxBacNetMsg, deviceDoc);
 
                     //Write back to DocDb
                     await outputDeviceDocumentsUpdated.AddAsync(deviceDoc, token);
@@ -103,15 +97,17 @@ namespace SmartCampusSandbox.AzureFunctions
                 {
                     //device id not found in database, 
                     //Todo - add to queue of unidentified devices
-                    unidentifiedDevices.Add(telemetryDataPoint.Body.name);
+                    unidentifiedDevices.Add(telemetryDataPoint.IoTWorxBacNetMsg.name);
                 }
+            }
+
+            if (unidentifiedDevices.Any())
                 log.LogError($"device document not found for the following ids: {String.Join(',', unidentifiedDevices)} ");
 
-            }
         }
 
         private static async Task<List<DeviceDocument>> GetKnownDeviceData(
-            IEnumerable<dynamic> messages,
+            IEnumerable<IotBacNetEventHubMessageBatch> messages,
             DocumentClient docDbClient,
             Uri createDocumentCollectionUri,
             ILogger log,
@@ -119,7 +115,7 @@ namespace SmartCampusSandbox.AzureFunctions
         {
             var knownDevices = new List<DeviceDocument>();
 
-            var deviceIds = messages.Select(x => x.Body.name).ToList();
+            var deviceIds = messages.Select(x => x.IoTWorxBacNetMsg.name).ToList();
 
             if (!deviceIds.Any())
             {
@@ -129,8 +125,8 @@ namespace SmartCampusSandbox.AzureFunctions
             {
                 log.LogInformation($"searching for the following devicesIds: {String.Join(',', deviceIds)}");
 
-                var query = docDbClient.CreateDocumentQuery<DeviceDocument>(createDocumentCollectionUri)
-                    .Where(document => deviceIds.Contains(document.Id))
+                var query = docDbClient.CreateDocumentQuery<DeviceDocument>(createDocumentCollectionUri, DocDbQueryOption)
+                    .Where(document => deviceIds.Contains(document.id))
                     .AsDocumentQuery();
                 
                 while (query.HasMoreResults)
@@ -157,7 +153,7 @@ namespace SmartCampusSandbox.AzureFunctions
             inputDeviceDocument.Instance = int.Parse(parsedDeviceName[3] ?? "");
             inputDeviceDocument.PresentValue = value;
             inputDeviceDocument.Units = unit;
-            inputDeviceDocument.DeviceTimestamp = telemetryDataPoint.timestamp.ToString("o");
+            inputDeviceDocument.DeviceTimestamp = DateTimeOffset.Parse((string)telemetryDataPoint.timestamp, styles: DateTimeStyles.RoundtripKind);
             inputDeviceDocument.DeviceStatus = telemetryDataPoint.status;
             inputDeviceDocument.EventEnqueuedUtcTime = enqueuedTimeUtc;
 
@@ -205,11 +201,38 @@ namespace SmartCampusSandbox.AzureFunctions
             }
             return (outputValue, outputUnits);
         }
+
+        
     }
+    public class IotBacNetEventHubMessageBatch
+    {
+        public IoTWorxBACNetMsg IoTWorxBacNetMsg { get; }
+        public EventData.SystemPropertiesCollection SystemProperties { get; }
+        public IDictionary<string, object> Properties { get; }
+
+        public IotBacNetEventHubMessageBatch(IoTWorxBACNetMsg ioTWorxBacNetMsg,
+            EventData.SystemPropertiesCollection systemProperties,
+            IDictionary<string, object> properties)
+        {
+            IoTWorxBacNetMsg = ioTWorxBacNetMsg;
+            SystemProperties = systemProperties;
+            Properties = properties;
+        }
+    }
+
+    public class IoTWorxBACNetMsg
+    {
+        public string gwy { get; set; }
+        public string name { get; set; }
+        public string value { get; set; }
+        public string timestamp { get; set; }
+        public string status { get; set; }
+    }
+
 
     public class DeviceDocument
     {
-        public string Id { get; set; }
+        public string id { get; set; }
         public string Region { get; set; }
         public string Campus{ get; set; } 
         public string Building{ get; set; } 
@@ -223,6 +246,6 @@ namespace SmartCampusSandbox.AzureFunctions
         public string Units{ get; set; } 
         public DateTimeOffset EventEnqueuedUtcTime{ get; set; }
         public string DeviceStatus { get; set; }
-        public string DeviceTimestamp { get; set; }
+        public DateTimeOffset DeviceTimestamp { get; set; }
     }
 }

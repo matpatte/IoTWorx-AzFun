@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="TransformTests-mattpatt-surfacebook2.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Remove="data\Device_190130_AV_67.json" />
   </ItemGroup>
 
