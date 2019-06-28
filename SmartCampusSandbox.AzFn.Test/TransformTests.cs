@@ -3,7 +3,6 @@ using Newtonsoft.Json;
 using NUnit.Framework;
 using SmartCampusSandbox.AzureFunctions;
 using System;
-using System.IO;
 using Shouldly;
 
 namespace Tests
@@ -37,7 +36,7 @@ namespace Tests
                 Instance = 90
 
             };
-            DeviceDocument output = SmartCampusSandbox.AzureFunctions.IoTWorxBuildingDataProcessingFunction.TransformMsgToDeviceDoc(
+            DeviceDocument output = SmartCampusSandbox.AzureFunctions.IoTWorxBuildingDataProcessingFunction.ApplyTelemetryToDeviceDoc(
                 DateTime.UtcNow, telemetryDataPoint, inputDeviceDocument);
 
             //output.Gateway.ShouldBe("b19IoTWorx");
@@ -67,7 +66,7 @@ namespace Tests
                   }";
             dynamic telemetryDataPoint = JsonConvert.DeserializeObject(jsonContent, _jsonSerializerSettings);
             DeviceDocument inputDeviceDocument = new DeviceDocument() { id = telemetryDataPoint.name };
-            DeviceDocument output = SmartCampusSandbox.AzureFunctions.IoTWorxBuildingDataProcessingFunction.TransformMsgToDeviceDoc(
+            DeviceDocument output = SmartCampusSandbox.AzureFunctions.IoTWorxBuildingDataProcessingFunction.ApplyTelemetryToDeviceDoc(
                 DateTime.UtcNow, telemetryDataPoint, inputDeviceDocument);
 
             output.EventEnqueuedUtcTime.ShouldBe(DateTime.UtcNow, TimeSpan.FromMilliseconds(1000));
@@ -89,7 +88,7 @@ namespace Tests
                   'status': true
                 }", _jsonSerializerSettings);
             DeviceDocument inputDeviceDocument = new DeviceDocument() { id = telemetryDataPoint.name };
-            DeviceDocument output = SmartCampusSandbox.AzureFunctions.IoTWorxBuildingDataProcessingFunction.TransformMsgToDeviceDoc(
+            DeviceDocument output = SmartCampusSandbox.AzureFunctions.IoTWorxBuildingDataProcessingFunction.ApplyTelemetryToDeviceDoc(
                 DateTime.UtcNow, telemetryDataPoint, inputDeviceDocument);
 
             output.EventEnqueuedUtcTime.ShouldBe(DateTime.UtcNow, TimeSpan.FromMilliseconds(1000));
@@ -110,7 +109,7 @@ namespace Tests
                       'status': true
                     }", _jsonSerializerSettings);
             DeviceDocument inputDeviceDocument = new DeviceDocument() { id = telemetryDataPoint.name };
-            DeviceDocument output = SmartCampusSandbox.AzureFunctions.IoTWorxBuildingDataProcessingFunction.TransformMsgToDeviceDoc(
+            DeviceDocument output = SmartCampusSandbox.AzureFunctions.IoTWorxBuildingDataProcessingFunction.ApplyTelemetryToDeviceDoc(
                 DateTime.UtcNow, telemetryDataPoint, inputDeviceDocument);
 
             output.EventEnqueuedUtcTime.ShouldBe(DateTime.UtcNow, TimeSpan.FromMilliseconds(1000));

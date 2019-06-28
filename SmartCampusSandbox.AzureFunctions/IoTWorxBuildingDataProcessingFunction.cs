@@ -58,7 +58,7 @@ namespace SmartCampusSandbox.AzureFunctions
             }
             */
 
-            //Deserialize all the inbound messages in the array, preserving properties
+            //Deserialize all the inbound messages in the batch, preserving properties
             var messages = eventHubMessages
                 .Select(data => new IotBacNetEventHubMessageBatch(
                     JsonConvert.DeserializeObject<IoTWorxBACNetMsg>(Encoding.UTF8.GetString(data.Body)),
@@ -68,42 +68,79 @@ namespace SmartCampusSandbox.AzureFunctions
 
             //Retrieve all the devices by Id in the inbound group
             var knownDeviceDocuments = await GetKnownDeviceData(messages, docDbClient, DocumentCollectionUri, log, token);
-            List<string> unidentifiedDevices = new List<string>();
 
-            foreach (var telemetryDataPoint in messages)
+            // Handle all the messages in the batch
+            await HandleMessageBatch(messages, knownDeviceDocuments, outputDeviceDocumentsUpdated, outputEvents, log, token);
+
+        }
+
+        public static async Task HandleMessageBatch(
+            List<IotBacNetEventHubMessageBatch> messageBatch,
+            List<DeviceDocument> knownDeviceDocuments,
+            IAsyncCollector<DeviceDocument> outputDeviceDocumentsUpdated,
+            IAsyncCollector<string> outputEvents,
+            ILogger log,
+            CancellationToken cancellationToken)
+        {
+            List<string> unprovisioned = new List<string>();
+
+            foreach (var telemetryDataPoint in messageBatch)
             {
-                if (token.IsCancellationRequested)
+                if (cancellationToken.IsCancellationRequested)
                 {
                     log.LogWarning("Function was cancelled.");
                     break;
                 }
 
-                var deviceDoc = knownDeviceDocuments.SingleOrDefault(document => document.id == telemetryDataPoint.IoTWorxBacNetMsg.name);
-                if (deviceDoc != null)
+                DeviceDocument deviceDoc = GetKnownOrNewDeviceDoc(knownDeviceDocuments, telemetryDataPoint);
+
+                //update the device doc with current value and time
+                DateTime enqueuedTimeUtc = telemetryDataPoint.SystemProperties?.EnqueuedTimeUtc ?? DateTime.UtcNow;
+                deviceDoc = ApplyTelemetryToDeviceDoc(
+                    enqueuedTimeUtc, telemetryDataPoint.IoTWorxBacNetMsg, deviceDoc);
+
+                //Write back to DocDb
+                await outputDeviceDocumentsUpdated.AddAsync(deviceDoc, cancellationToken);
+
+                if (deviceDoc.Unprovisioned)
                 {
-                    //update the device doc with current value and time
-                    deviceDoc = TransformMsgToDeviceDoc(
-                        telemetryDataPoint.SystemProperties.EnqueuedTimeUtc, telemetryDataPoint.IoTWorxBacNetMsg, deviceDoc);
-
-                    //Write back to DocDb
-                    await outputDeviceDocumentsUpdated.AddAsync(deviceDoc, token);
-
-                    //Send to EventHub
-                    await outputEvents.AddAsync(JsonConvert.SerializeObject(deviceDoc), token);
-
-                    log.LogDebug(JsonConvert.SerializeObject(deviceDoc, Formatting.Indented));
+                    //Todo - add to queue of unprovisioned devices
+                    unprovisioned.Add(telemetryDataPoint.IoTWorxBacNetMsg.name);
                 }
                 else
                 {
-                    //device id not found in database,
-                    //Todo - add to queue of unidentified devices
-                    unidentifiedDevices.Add(telemetryDataPoint.IoTWorxBacNetMsg.name);
+                    //Send to EventHub
+                    await outputEvents.AddAsync(JsonConvert.SerializeObject(deviceDoc), cancellationToken);
                 }
+                log.LogDebug(JsonConvert.SerializeObject(deviceDoc, Formatting.Indented));
             }
 
-            if (unidentifiedDevices.Any())
-                log.LogError($"device document not found for the following ids: {String.Join(',', unidentifiedDevices)} ");
+            if (unprovisioned.Any())
+                log.LogError($"Unprovisioned DeviceIds encountered: {String.Join(',', unprovisioned)} ");
+        }
 
+        private static DeviceDocument GetKnownOrNewDeviceDoc(
+            List<DeviceDocument> knownDeviceDocuments, 
+            IotBacNetEventHubMessageBatch telemetryDataPoint)
+        {
+            //Lookup Known Devices in CosmosDB by Id
+            var deviceDoc = knownDeviceDocuments.SingleOrDefault(
+                document => document.id == telemetryDataPoint.IoTWorxBacNetMsg.name);        
+
+            if (deviceDoc == null) //not found, so create a new one and mark it unprovisioned
+            {
+                deviceDoc = new DeviceDocument()
+                {
+                    id = telemetryDataPoint.IoTWorxBacNetMsg.name,
+                    Unprovisioned = true
+                };
+            }
+            else
+            {
+                deviceDoc.Unprovisioned = false;
+            }
+
+            return deviceDoc;
         }
 
         private static async Task<List<DeviceDocument>> GetKnownDeviceData(
@@ -138,7 +175,10 @@ namespace SmartCampusSandbox.AzureFunctions
             return knownDevices;
         }
 
-        public static DeviceDocument TransformMsgToDeviceDoc(DateTime enqueuedTimeUtc, dynamic telemetryDataPoint, DeviceDocument inputDeviceDocument)
+        public static DeviceDocument ApplyTelemetryToDeviceDoc(
+            DateTime enqueuedTimeUtc, 
+            dynamic telemetryDataPoint, 
+            DeviceDocument inputDeviceDocument)
         {
             var parsedDeviceName = ((string)telemetryDataPoint.name).Split('_');
 
@@ -245,5 +285,6 @@ namespace SmartCampusSandbox.AzureFunctions
         public DateTimeOffset EventEnqueuedUtcTime{ get; set; }
         public string DeviceStatus { get; set; }
         public DateTimeOffset DeviceTimestamp { get; set; }
+        public bool Unprovisioned { get; set; }
     }
 }
