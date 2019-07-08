@@ -6,7 +6,7 @@ using System.Diagnostics;
 using System.Text;
 using Moq;
 
-namespace SmartCampusSandbox.AzFn.Test
+namespace SmartCampusSandbox.Test
 {
     public static class LoggerUtils
     {
