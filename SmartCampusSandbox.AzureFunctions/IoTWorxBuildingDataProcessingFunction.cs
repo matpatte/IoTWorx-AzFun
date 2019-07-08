@@ -29,7 +29,7 @@ namespace SmartCampusSandbox.AzureFunctions
             [IoTHubTrigger(
                 eventHubName: "messages/events",
                 Connection = "IoTHubTriggerConnection",
-                ConsumerGroup = "dev")] EventData[] eventHubMessages,
+                ConsumerGroup = "%IoTHub_ConsumerGroup%")] EventData[] eventHubMessages,
 
             [CosmosDB(
                 databaseName: "SmartCampusSandbox",
@@ -53,7 +53,7 @@ namespace SmartCampusSandbox.AzureFunctions
             ILogger log,
             System.Threading.CancellationToken token)
         {
-            //Todo - determine what the inbound BACNet message format is and desrialize/transfor accordingly
+            //Todo - determine what the inbound BACNet message format is and desrialized/transformed accordingly
 
             //Deserialize all the inbound messages in the batch, preserving properties
             var messages = eventHubMessages
