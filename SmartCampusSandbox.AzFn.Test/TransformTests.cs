@@ -5,7 +5,7 @@ using SmartCampusSandbox.AzureFunctions;
 using System;
 using Shouldly;
 
-namespace Tests
+namespace SmartCampusSandbox.Test
 {
     public class TransformTests
     {
@@ -27,7 +27,10 @@ namespace Tests
                     'timestamp': '2019-06-10T23:48:43.667Z',
                     'status': true
                 }";
-            dynamic telemetryDataPoint = JsonConvert.DeserializeObject(jsonContent, _jsonSerializerSettings);
+            var telemetryDataPoint = JsonConvert.DeserializeObject<BACNetTelemetryMsg>(jsonContent, _jsonSerializerSettings);
+            var eventData = new EventData(new byte[0]);
+            BACNetIoTHubMessage bacNetIoTHubMessage = new BACNetIoTHubMessage(telemetryDataPoint, eventData.SystemProperties, eventData.Properties);
+
             DeviceDocument inputDeviceDocument = new DeviceDocument()
             {
                 id = telemetryDataPoint.name,
@@ -36,8 +39,7 @@ namespace Tests
                 Instance = 90
 
             };
-            DeviceDocument output = SmartCampusSandbox.AzureFunctions.IoTWorxBuildingDataProcessingFunction.ApplyTelemetryToDeviceDoc(
-                DateTime.UtcNow, telemetryDataPoint, inputDeviceDocument);
+            DeviceDocument output = IoTWorxBuildingDataProcessingFunction.ApplyTelemetryToDeviceDoc(bacNetIoTHubMessage, inputDeviceDocument);
 
             //output.Gateway.ShouldBe("b19IoTWorx");
             output.id.ShouldBe((string)telemetryDataPoint.name);
@@ -48,7 +50,7 @@ namespace Tests
             output.PresentValue.ShouldBe("73.000000");
             output.ValueUnits.ShouldBe("DEGREES-FAHRENHEIT");
             output.DeviceTimestamp.ShouldBe(DateTime.Parse("2019-06-10T23:48:43.667Z"));
-            output.DeviceStatus.ShouldBe(bool.TrueString);
+            output.DeviceStatus.ToLower().ShouldBe(bool.TrueString.ToLower());
             Console.Write(JsonConvert.SerializeObject(output));
         }
 
@@ -64,59 +66,66 @@ namespace Tests
                       'timestamp': '2019-06-12T19:46:52.174Z',
                       'status': true
                   }";
-            dynamic telemetryDataPoint = JsonConvert.DeserializeObject(jsonContent, _jsonSerializerSettings);
+            var telemetryDataPoint = JsonConvert.DeserializeObject<BACNetTelemetryMsg>(jsonContent, _jsonSerializerSettings);
+            var eventData = new EventData(new byte[0]);
+            BACNetIoTHubMessage bacNetIoTHubMessage = new BACNetIoTHubMessage(telemetryDataPoint, eventData.SystemProperties, eventData.Properties);
+
             DeviceDocument inputDeviceDocument = new DeviceDocument() { id = telemetryDataPoint.name };
-            DeviceDocument output = SmartCampusSandbox.AzureFunctions.IoTWorxBuildingDataProcessingFunction.ApplyTelemetryToDeviceDoc(
-                DateTime.UtcNow, telemetryDataPoint, inputDeviceDocument);
+            DeviceDocument output = IoTWorxBuildingDataProcessingFunction.ApplyTelemetryToDeviceDoc(bacNetIoTHubMessage, inputDeviceDocument);
 
             output.EventEnqueuedUtcTime.ShouldBe(DateTime.UtcNow, TimeSpan.FromMilliseconds(1000));
             output.PresentValue.ShouldBe("121.000000");
             output.ValueUnits.ShouldBe("CUBIC-FEET-PER-MINUTE");
             output.DeviceTimestamp.ShouldBe(DateTime.Parse("2019-06-12T19:46:52.174Z"));
-            output.DeviceStatus.ShouldBe(bool.TrueString);
+            output.DeviceStatus.ToLower().ShouldBe(bool.TrueString.ToLower());
         }
 
         [Test]
         public void TransformTestWithoutUnit()
         {
-            dynamic telemetryDataPoint = JsonConvert.DeserializeObject(
-                @"{
+            string jsonContent = @"{
                   'gwy': 'b19IoTWorx',
                   'name': 'Device_190130_AV_67',
                   'value': '400.000000',
                   'timestamp': '2019-06-10T23:48:43.667Z',
                   'status': true
-                }", _jsonSerializerSettings);
+                }";
+            var telemetryDataPoint = JsonConvert.DeserializeObject<BACNetTelemetryMsg>(jsonContent, _jsonSerializerSettings);
+            var eventData = new EventData(new byte[0]);
+            BACNetIoTHubMessage bacNetIoTHubMessage = new BACNetIoTHubMessage(telemetryDataPoint, eventData.SystemProperties, eventData.Properties);
+
             DeviceDocument inputDeviceDocument = new DeviceDocument() { id = telemetryDataPoint.name };
-            DeviceDocument output = SmartCampusSandbox.AzureFunctions.IoTWorxBuildingDataProcessingFunction.ApplyTelemetryToDeviceDoc(
-                DateTime.UtcNow, telemetryDataPoint, inputDeviceDocument);
+            DeviceDocument output = IoTWorxBuildingDataProcessingFunction.ApplyTelemetryToDeviceDoc(bacNetIoTHubMessage, inputDeviceDocument);
 
             output.EventEnqueuedUtcTime.ShouldBe(DateTime.UtcNow, TimeSpan.FromMilliseconds(1000));
             output.PresentValue.ShouldBe("400.000000");
             output.ValueUnits.ShouldBeEmpty();
             output.DeviceTimestamp.ShouldBe(DateTime.Parse("2019-06-10T23:48:43.667Z"));
-            output.DeviceStatus.ShouldBe(bool.TrueString);
+            output.DeviceStatus.ToLower().ShouldBe(bool.TrueString.ToLower());
         }
         [Test]
         public void TransformTestWithBinaryValue()
         {
-            dynamic telemetryDataPoint = JsonConvert.DeserializeObject(
-                @"{
+            string jsonContent = @"{
                       'gwy': 'b19IoTWorx',
                       'name': 'Device_190130_BV_66',
                       'value': 0,
                       'timestamp': '2019-06-10T23:48:43.667Z',
                       'status': true
-                    }", _jsonSerializerSettings);
+                    }";
+
+            var telemetryDataPoint = JsonConvert.DeserializeObject<BACNetTelemetryMsg>(jsonContent, _jsonSerializerSettings);
+            var eventData = new EventData(new byte[0]);
+            BACNetIoTHubMessage bacNetIoTHubMessage = new BACNetIoTHubMessage(telemetryDataPoint, eventData.SystemProperties, eventData.Properties);
+
             DeviceDocument inputDeviceDocument = new DeviceDocument() { id = telemetryDataPoint.name };
-            DeviceDocument output = SmartCampusSandbox.AzureFunctions.IoTWorxBuildingDataProcessingFunction.ApplyTelemetryToDeviceDoc(
-                DateTime.UtcNow, telemetryDataPoint, inputDeviceDocument);
+            DeviceDocument output = IoTWorxBuildingDataProcessingFunction.ApplyTelemetryToDeviceDoc(bacNetIoTHubMessage, inputDeviceDocument);
 
             output.EventEnqueuedUtcTime.ShouldBe(DateTime.UtcNow, TimeSpan.FromMilliseconds(1000));
             output.PresentValue.ShouldBe("0");
             output.ValueUnits.ShouldBeEmpty();
             output.DeviceTimestamp.ShouldBe(DateTime.Parse("2019-06-10T23:48:43.667Z"));
-            output.DeviceStatus.ShouldBe(bool.TrueString);
+            output.DeviceStatus.ToLower().ShouldBe(bool.TrueString.ToLower());
         }
     }
 }

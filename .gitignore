@@ -188,7 +188,7 @@ GeneratedArtifacts/
 _Pvt_Extensions/
 ModelManifest.xml
 
-# Added by OneITVSO 
+# Added by OneITVSO
 *.dll
 *.exe
 
@@ -198,3 +198,4 @@ local.settings.json
 *.pubxml
 *.cmd
 *.sql
+SmartCampusSandbox.AzureFunctions/data/B121_BACMap.json
