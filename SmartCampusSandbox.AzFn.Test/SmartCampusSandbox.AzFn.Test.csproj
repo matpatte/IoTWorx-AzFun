@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>netcoreapp2.2</TargetFramework>
-
+    <langversion>latest</langversion>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
