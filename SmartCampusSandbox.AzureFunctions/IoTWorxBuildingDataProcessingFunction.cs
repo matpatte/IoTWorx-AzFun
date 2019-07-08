@@ -46,19 +46,13 @@ namespace SmartCampusSandbox.AzureFunctions
                 eventHubName: "iotworxoutputevents",
                 Connection = "EventHubConnectionAppSetting")] IAsyncCollector<string> outputEvents,
 
+            // Incomming messages which aren't found in the reference data set will be sent here instead of to EH
+            [Table("UnprovisionedDeviceTelemetry",
+                Connection ="AzureWebJobsStorage")] IAsyncCollector<DeviceTableEntity> outputUnprovisionedDevices,
+
             ILogger log,
             System.Threading.CancellationToken token)
         {
-            /* Example inbound JSON from IoTWorx
-            * {
-            "gwy": "b19IoTWorx",
-            "name": "Device_190131_AI_10",
-            "value": "121.000000 CUBIC-FEET-PER-MINUTE",
-            "timestamp": "2019-06-12T19:46:52.174Z",
-            "status": true
-            }
-            */
-
             //Todo - determine what the inbound BACNet message format is and desrialize/transfor accordingly
 
             //Deserialize all the inbound messages in the batch, preserving properties
@@ -73,15 +67,16 @@ namespace SmartCampusSandbox.AzureFunctions
             var knownDeviceDocuments = await GetKnownDeviceData(messages, docDbClient, DocumentCollectionUri, log, token);
 
             // Handle all the messages in the batch
-            await HandleMessageBatch(messages, knownDeviceDocuments, outputDeviceDocumentsUpdated, outputEvents, log, token);
+            await HandleMessageBatch(messages, knownDeviceDocuments, outputDeviceDocumentsUpdated, outputEvents, outputUnprovisionedDevices, log, token);
 
         }
 
         public static async Task HandleMessageBatch(
             List<BACNetIoTHubMessage> messageBatch,
             List<DeviceDocument> knownDeviceDocuments,
-            IAsyncCollector<DeviceDocument> outputDeviceDocumentsUpdated,
-            IAsyncCollector<string> outputEvents,
+            IAsyncCollector<DeviceDocument> deviceDocumentsWriteCollector,
+            IAsyncCollector<string> eventCollector,
+            IAsyncCollector<DeviceTableEntity> unprovisionedDeviceCollector,
             ILogger log,
             CancellationToken cancellationToken)
         {
@@ -100,18 +95,18 @@ namespace SmartCampusSandbox.AzureFunctions
                 //update the device doc with inbound telemetry (value, timestamp, status, etc.)
                 deviceDoc = ApplyTelemetryToDeviceDoc(bacNetIoTHubMsg, deviceDoc);
 
-                //Write back to DocDb
-                await outputDeviceDocumentsUpdated.AddAsync(deviceDoc, cancellationToken);
+                //UpSERT the device document to Cosmos 
+                await deviceDocumentsWriteCollector.AddAsync(deviceDoc, cancellationToken);
 
                 if (String.Equals(deviceDoc.DeviceStatus, DEVICE_STATUS_UNPROVISIONED, StringComparison.OrdinalIgnoreCase))
-                {
-                    //Todo - add to queue of unprovisioned devices
+                {   //Handle Unprovisioned Devices here
                     unprovisioned.Add(bacNetIoTHubMsg.BACNetMsg.name);
+                    await unprovisionedDeviceCollector.AddAsync(new DeviceTableEntity(bacNetIoTHubMsg),cancellationToken);
                 }
                 else
                 {
-                    //Send to EventHub
-                    await outputEvents.AddAsync(JsonConvert.SerializeObject(deviceDoc), cancellationToken);
+                    //Provisioned Device only code
+                    await eventCollector.AddAsync(JsonConvert.SerializeObject(deviceDoc), cancellationToken);
                 }
                 log.LogDebug(JsonConvert.SerializeObject(deviceDoc, Formatting.Indented));
             }
@@ -233,58 +228,5 @@ namespace SmartCampusSandbox.AzureFunctions
         }
 
 
-    }
-    public class BACNetIoTHubMessage
-    {
-        public BACNetTelemetryMsg BACNetMsg { get; }
-        public EventData.SystemPropertiesCollection SystemProperties { get; }
-        public IDictionary<string, object> Properties { get; }
-
-        public BACNetIoTHubMessage(BACNetTelemetryMsg bacNetMsg,
-            EventData.SystemPropertiesCollection systemProperties,
-            IDictionary<string, object> properties)
-        {
-            BACNetMsg = bacNetMsg;
-            SystemProperties = systemProperties;
-            Properties = properties;
-        }
-    }
-
-    public class BACNetTelemetryMsg
-    {
-        public string gwy { get; set; }
-        public string name { get; set; }
-        public string value { get; set; }
-        public string timestamp { get; set; }
-        public string status { get; set; }
-    }
-
-
-    public class DeviceDocument
-    {
-        public string id { get; set; }
-        public string GatewayName {get; set;}
-        public string DeviceName { get; set; }
-        public string Region { get; set; }
-        public string Campus { get; set; }
-        public string Building { get; set; }
-        public string Floor { get; set; }
-        public string Unit { get; set; }
-        public string ObjectType { get; set; } //Object is a reserved word, hence the @
-        public int Instance { get; set; }
-
-        public string EquipmentClass { get; set; }
-        public string EquipmentModel { get; set; }
-        public string SubsystemClass { get; set; }
-        public string SubsystemModel { get; set; }
-        public string TagName { get; set; }
-        public string FullAssetPath { get; set; }
-        public string Equipment { get; set; }
-
-        public string PresentValue{ get; set; }
-        public string ValueUnits{ get; set; }
-        public DateTimeOffset EventEnqueuedUtcTime{ get; set; }
-        public string DeviceStatus { get; set; }
-        public DateTimeOffset DeviceTimestamp { get; set; }
     }
 }
