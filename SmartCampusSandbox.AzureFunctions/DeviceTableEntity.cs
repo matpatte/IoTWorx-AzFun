@@ -23,6 +23,7 @@ namespace SmartCampusSandbox.AzureFunctions
         {
             this.PartitionKey = bacNetIoTHubMsg.BACNetMsg.gwy;
             this.RowKey = bacNetIoTHubMsg.BACNetMsg.name;
+            this.ETag = "*"; //Super obscure UPSERT trigger which tells to use InsertOrReplace call (https://github.com/Azure/azure-webjobs-sdk/blob/ea55e6ef5439b1059b43825cb9d40cc12ae219bc/src/Microsoft.Azure.WebJobs.Extensions.Storage/Tables/TableEntityWriter.cs#L100)
             this.Timestamp = DateTime.UtcNow;
             this.BACNetIoTHubMsg = bacNetIoTHubMsg;
             this.Text = JsonConvert.SerializeObject(bacNetIoTHubMsg);
