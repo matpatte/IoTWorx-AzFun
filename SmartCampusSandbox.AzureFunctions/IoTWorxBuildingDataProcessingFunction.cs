@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.ApplicationInsights;
 using Microsoft.Azure.Documents.Client;
 using Microsoft.Azure.Documents.Linq;
 using Microsoft.Azure.EventHubs;
@@ -21,6 +22,7 @@ namespace SmartCampusSandbox.AzureFunctions
     {
         private static readonly Uri DocumentCollectionUri = UriFactory.CreateDocumentCollectionUri("SmartCampusSandbox", "Devices");
         private static readonly FeedOptions DocDbQueryOption = new FeedOptions { EnableCrossPartitionQuery = true };
+        private static int unprovisionedCount;
         public const string DEVICE_STATUS_UNPROVISIONED = "Unprovisioned";
 
         [FunctionName("IoTWorxBuildingDataProcessingFunction")]
@@ -67,7 +69,13 @@ namespace SmartCampusSandbox.AzureFunctions
             var knownDeviceDocuments = await GetKnownDeviceData(messages, docDbClient, DocumentCollectionUri, log, token);
 
             // Handle all the messages in the batch
-            await HandleMessageBatch(messages, knownDeviceDocuments, outputDeviceDocumentsUpdated, outputEvents, outputUnprovisionedDevices, log, token);
+            await HandleMessageBatch(messages, knownDeviceDocuments, outputDeviceDocumentsUpdated,
+                outputEvents, outputUnprovisionedDevices, log, token);
+
+            //Track Metrics
+            TelemetryClient client = new TelemetryClient();
+            client.GetMetric("BACNetIoTHubMessageBatchSize").TrackValue(eventHubMessages.Count());
+            client.GetMetric("BACNetIoTHubUnprovisionedDevices").TrackValue(unprovisionedCount);
 
         }
 
@@ -111,7 +119,10 @@ namespace SmartCampusSandbox.AzureFunctions
             }
 
             if (unprovisioned.Any())
+            {
+                Interlocked.Increment(ref unprovisionedCount);
                 log.LogError($"Unprovisioned DeviceIds encountered: {String.Join(',', unprovisioned)} ");
+            }
         }
 
         private static DeviceDocument GetKnownOrNewDeviceDoc(
