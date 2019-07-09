@@ -95,7 +95,7 @@ namespace SmartCampusSandbox.AzureFunctions
                 //update the device doc with inbound telemetry (value, timestamp, status, etc.)
                 deviceDoc = ApplyTelemetryToDeviceDoc(bacNetIoTHubMsg, deviceDoc);
 
-                //UpSERT the device document to Cosmos 
+                //UpSERT the device document to Cosmos
                 await deviceDocumentsWriteCollector.AddAsync(deviceDoc, cancellationToken);
 
                 if (String.Equals(deviceDoc.DeviceStatus, DEVICE_STATUS_UNPROVISIONED, StringComparison.OrdinalIgnoreCase))
@@ -108,7 +108,6 @@ namespace SmartCampusSandbox.AzureFunctions
                     //Provisioned Device only code
                     await eventCollector.AddAsync(JsonConvert.SerializeObject(deviceDoc), cancellationToken);
                 }
-                log.LogDebug(JsonConvert.SerializeObject(deviceDoc, Formatting.Indented));
             }
 
             if (unprovisioned.Any())
@@ -152,7 +151,7 @@ namespace SmartCampusSandbox.AzureFunctions
             }
             else
             {
-                log.LogInformation($"searching for the following devicesIds: {String.Join(',', deviceIds)}");
+                log.LogDebug($"searching for the following devicesIds: {String.Join(',', deviceIds)}");
 
                 var query = docDbClient.CreateDocumentQuery<DeviceDocument>(createDocumentCollectionUri, DocDbQueryOption)
                     .Where(document => deviceIds.Contains(document.id))
